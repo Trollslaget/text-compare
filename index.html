@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Сравнение файлов</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+				background-color: #f5f5f5;
+				color: #333;
+			}
+			h1 {
+				text-align: center;
+				color: #007bff;
+			}
+			.file-input-group {
+				margin-bottom: 20px;
+				padding: 15px;
+				background: white;
+				border-radius: 8px;
+				box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+			}
+			label {
+				display: block;
+				margin-bottom: 5px;
+				font-weight: bold;
+			}
+			input[type="file"] {
+				width: 100%;
+				padding: 10px;
+				border: 1px solid #ddd;
+				border-radius: 4px;
+				box-sizing: border-box;
+			}
+			button {
+				width: 100%;
+				padding: 15px;
+				background-color: #007bff;
+				color: white;
+				border: none;
+				border-radius: 8px;
+				font-size: 16px;
+				cursor: pointer;
+				margin: 10px 0;
+			}
+			button:hover {
+				background-color: #0056b3;
+			}
+			button:disabled {
+				background-color: #ccc;
+				cursor: not-allowed;
+			}
+			.download-btn {
+				background-color: #28a745;
+				margin-top: 10px;
+			}
+			.download-btn:hover {
+				background-color: #218838;
+			}
+			#results {
+				margin-top: 20px;
+				padding: 15px;
+				background: white;
+				border-radius: 8px;
+				box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+				display: none;
+			}
+			#diff-output {
+				white-space: pre-wrap;
+				background: #f8f9fa;
+				padding: 10px;
+				border-radius: 4px;
+				font-family: monospace;
+				max-height: 400px;
+				overflow-y: auto;
+				border: 1px solid #ddd;
+			}
+			.error {
+				color: #dc3545;
+				background: #f8d7da;
+				padding: 10px;
+				border-radius: 4px;
+				margin: 10px 0;
+			}
+			@media (max-width: 480px) {
+				body {
+					padding: 10px;
+				}
+				button {
+					font-size: 18px;
+					padding: 20px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Сравнение двух файлов</h1>
+		<p>
+			Загрузите два текстовых файла для сравнения (строки уникальные для первого
+			файла).
+		</p>
+
+		<div class="file-input-group">
+			<label for="file1">Первый файл:</label>
+			<input type="file" id="file1" accept=".txt,.log" />
+		</div>
+
+		<div class="file-input-group">
+			<label for="file2">Второй файл:</label>
+			<input type="file" id="file2" accept=".txt,.log" />
+		</div>
+
+		<button id="compareBtn" onclick="compareFiles()">Сравнить файлы</button>
+
+		<div id="results">
+			<h2>Результат сравнения</h2>
+			<button class="download-btn" onclick="downloadDiff()">
+				Скачать diff.txt
+			</button>
+			<p id="count"></p>
+			<div id="diff-output"></div>
+		</div>
+
+		<script>
+			let currentDiff = []; // Глобальная переменная для хранения diff
+
+			function compareFiles() {
+				const file1Input = document.getElementById("file1");
+				const file2Input = document.getElementById("file2");
+				const btn = document.getElementById("compareBtn");
+				const results = document.getElementById("results");
+				const output = document.getElementById("diff-output");
+				const count = document.getElementById("count");
+
+				if (!file1Input.files[0] || !file2Input.files[0]) {
+					showError("Выберите оба файла");
+					return;
+				}
+
+				btn.disabled = true;
+				btn.textContent = "Обработка...";
+				results.style.display = "none";
+				output.textContent = "";
+				currentDiff = []; // Сброс
+
+				const file1 = file1Input.files[0];
+				const file2 = file2Input.files[0];
+
+				const reader1 = new FileReader();
+				const reader2 = new FileReader();
+
+				reader1.onload = function (e1) {
+					reader2.onload = function (e2) {
+						try {
+							const content1 = e1.target.result;
+							const content2 = e2.target.result;
+
+							// Разбиваем на строки (учитывая \r\n)
+							const lines1 = content1
+								.split(/\r?\n/)
+								.filter((line) => line.trim() !== "");
+							const lines2 = content2
+								.split(/\r?\n/)
+								.filter((line) => line.trim() !== "");
+
+							const set1 = new Set(lines1);
+							const set2 = new Set(lines2);
+
+							currentDiff = [...set1].filter((line) => !set2.has(line));
+
+							output.textContent = currentDiff.join("\n");
+							count.textContent = `Найдено уникальных строк: ${currentDiff.length}`;
+							results.style.display = "block";
+						} catch (error) {
+							showError("Ошибка обработки: " + error.message);
+						} finally {
+							btn.disabled = false;
+							btn.textContent = "Сравнить файлы";
+						}
+					};
+					reader2.readAsText(file2);
+				};
+
+				reader1.onerror = reader2.onerror = function () {
+					showError("Ошибка чтения файла");
+					btn.disabled = false;
+					btn.textContent = "Сравнить файлы";
+				};
+
+				reader1.readAsText(file1);
+			}
+
+			function downloadDiff() {
+				if (currentDiff.length === 0) {
+					showError("Сначала выполните сравнение");
+					return;
+				}
+
+				const content = currentDiff.join("\n") + "\n";
+				const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = "diff.txt";
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+
+			function showError(message) {
+				const errorDiv = document.createElement("div");
+				errorDiv.className = "error";
+				errorDiv.textContent = message;
+				document.body.appendChild(errorDiv);
+				setTimeout(() => errorDiv.remove(), 5000);
+			}
+		</script>
+	</body>
+</html>
